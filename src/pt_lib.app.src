@@ -1,0 +1,11 @@
+{application,pt_lib,
+ [
+  {description,"Parse transform library"},
+  {id,"pt_lib"},
+  {modules,[]},
+  {registered,[]},
+  {applications,[kernel,stdlib,syntax_tools,compiler,sasl]},
+  {env,[]},
+  {vsn,git}
+ ]
+}.
