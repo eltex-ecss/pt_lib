@@ -335,7 +335,12 @@ add_local_function(AST, Fun = {function, _, Name, Arity, _}) ->
 
     case pt_lib:match(AST, {eof, _}) of
         [{eof, Line} = EOF] ->
-            ASTTmp = pt_lib:replace(AST, EOF, pt_supp:insert_lines(Fun, Line)),
+            case LineFunction /= 0 andalso LineFunction < Line of
+                true ->
+                    ASTTmp = pt_lib:replace(AST, EOF, Fun);
+                false ->
+                    ASTTmp = pt_lib:replace(AST, EOF, pt_supp:insert_lines(Fun, Line))
+            end,
             lists:append(ASTTmp, [{eof, Line}]);
         _ ->
             throw(?mk_parse_error(0, {bad_param, AST}))
