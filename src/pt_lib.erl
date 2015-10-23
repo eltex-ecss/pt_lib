@@ -326,7 +326,7 @@ replace_function(_AST, Fun) ->
 %% @doc     Adds local function AST `Fun' to `AST'.
 %% @end
 %%--------------------------------------------------------------------
-add_local_function(AST, Fun = {function, _, Name, Arity, _}) ->
+add_local_function(AST, Fun = {function, LineFunction, Name, Arity, _}) ->
     case lists:keyfind(Name, 3, AST) of
         {function, L, Name, Arity, _} ->
             throw(?mk_parse_error(L, {fun_already_exists, Name, Arity}));
