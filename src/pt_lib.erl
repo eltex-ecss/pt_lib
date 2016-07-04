@@ -153,7 +153,7 @@ replace_first(_AST, _Fun) ->
 get_module_name(AST) ->
     pt_supp:get_module_name(AST).
 
--spec set_module_name(ast(), ModuleName :: string()) -> ast().
+-spec set_module_name(ast(), ModuleName :: module()) -> ast().
 %%--------------------------------------------------------------------
 %% @doc     Sets module name `ModuleName' for the `AST'.
 %% @end
@@ -193,8 +193,6 @@ get_function_ast(AST, FunctionName, Arity) ->
 get_compile_options(AST) ->
     pt_supp:get_compile_options(AST).
 
--spec get_attribute_value(atom(), ast()) ->
-    [term()].
 %%--------------------------------------------------------------------
 %% @doc     Returns `Attribute' values list from the `AST'.
 %% @end

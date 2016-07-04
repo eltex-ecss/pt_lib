@@ -114,8 +114,6 @@ get_file_name(AST) ->
 get_compile_options(AST) ->
     get_attribute_value(compile, AST).
 
--spec get_attribute_value(Attribute :: atom(), ast()) ->
-    [term()].
 %%--------------------------------------------------------------------
 %% @doc     Returns `Attribute' values list from the `AST'.
 %%          But attribute list is interpreted as a list of one

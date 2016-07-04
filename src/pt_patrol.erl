@@ -48,9 +48,9 @@
 -type user_params() :: {file, string(), filter_type()} | {tty, filter_type()} | {source, string()}.
 
 -record(patrol_state, {
-    file :: {string, term(), filter_type()},
-    tty :: filter_type(),
-    source :: string()
+    file :: {string(), term(), filter_type()} | undefined | null,
+    tty :: filter_type() | null,
+    source :: string() | undefined | null
 }).
 
 -spec parse_transform(ast(), term()) -> ast().
@@ -237,12 +237,10 @@ stop(ResAST, StartRes) ->
             ok
     end.
 
--spec params_check([user_params()]) -> ok.
-
+params_check([]) -> ok;
 params_check([P | T]) ->
     param_check(P),
-    params_check(T);
-params_check([]) -> ok.
+    params_check(T).
 
 -spec param_check(user_params()) -> ok.
 
