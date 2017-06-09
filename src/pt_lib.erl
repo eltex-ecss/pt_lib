@@ -14,7 +14,7 @@
 -include("pt_types.hrl").
 
 -export([
-         match/2,
+         match/2, match/3,
          replace_module_name/2,
          replace/3, replace/2,
          replace_fold/3, replace_fold/4,
@@ -67,6 +67,15 @@ parse_transform(AST, Options) ->
 %% @end
 %%--------------------------------------------------------------------
 match(_AST, _ASTPattern) ->
+    erlang:error(undef).
+
+-spec match(AST::ast(), ASTPattern::term(), Value::ast()) -> ast().
+%%--------------------------------------------------------------------
+%% @doc     Replaces every subtree in the `AST' which matches
+%%          `ASTPattern' with `Value'.
+%% @end
+%%--------------------------------------------------------------------
+match(_AST, _Pattern, _Value) ->
     erlang:error(undef).
 
 -spec replace_module_name(ast(), atom()) -> ast().

@@ -801,19 +801,10 @@ replace_function(_Call = {call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, r
     ReplacedWith = {call, Line, {remote, Line, {atom, Line, pt_supp}, {atom, Line, replace_first}}, [Tree, ReplaceFun]},
     ReplacedWith;
 
-replace_function(_Call = {call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, match}}, [Tree, Pattern]}, _) ->
-    ReplaceFun =
-    {'fun', Line, {clauses, [{clause, Line,
-        [{var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'}],
-        [],
-        [{'case', Line, {var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'},
-            [
-                {clause, Line, [Pattern], [], [{atom, Line, 'true'}]},
-                {clause, Line, [{var, Line, '_'}], [], [{atom, Line, 'false'}]}
-            ]}]
-    }]}},
-    ReplaceWith = {call, Line, {remote, Line, {atom, Line, pt_supp}, {atom, Line, match}}, [Tree, ReplaceFun]},
-    ReplaceWith;
+replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern]}, P1) ->
+    replace_function2({call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, []]}, P1);
+replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, Guard]}, P1) ->
+    replace_function2({call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, [Guard]]}, P1);
 
 % ast("log()", Line) -> {call, Line, {atom, Line, log}, []}
 replace_function(_Call = {call, Line, {atom, _, ast}, [{string, _, Str}, LineVarAst]}, _) ->
@@ -862,6 +853,20 @@ replace_function({call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, is_fun}},
 
 replace_function(Call, _) ->
     throw(?mk_int_error({unhandled_replace_param, Call})).
+
+replace_function2(_Call = {call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, match}}, [Tree, Pattern, Guard]}, _) ->
+    ReplaceFun =
+    {'fun', Line, {clauses, [{clause, Line,
+        [{var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'}],
+        [],
+        [{'case', Line, {var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'},
+            [
+                {clause, Line, [Pattern], Guard, [{atom, Line, 'true'}]},
+                {clause, Line, [{var, Line, '_'}], [], [{atom, Line, 'false'}]}
+            ]}]
+    }]}},
+    ReplaceWith = {call, Line, {remote, Line, {atom, Line, pt_supp}, {atom, Line, match}}, [Tree, ReplaceFun]},
+    ReplaceWith.
 
 % processing things like "{String, @Module}"
 process_variables(AST, VarLineAst) ->
