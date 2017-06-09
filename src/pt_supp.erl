@@ -49,6 +49,7 @@
             list_concat/2,
             list_length/1,
             match/2,
+            first_clause/2,
             compile/1,
             compile_to_beam/2,
             compile_and_load/1,
@@ -211,6 +212,84 @@ match (Tree, Fun) ->
         [],
         Tree
     ).
+
+
+-spec first_clause(ast(),
+            Fun :: fun( (ast()) -> true  | false ),
+            Res :: ast()) ->
+        ast().
+
+first_clause([El | Tail], Fun, Res) ->
+    case first_clause(El, Fun) of
+        [] ->
+            first_clause(Tail, Fun, Res);
+        _ ->
+            {_, TypeClause} = type_clause(El),
+            first_clause(Tail, Fun, [{TypeClause, El} | Res])
+    end;
+first_clause([], _Fun, Res) ->
+    lists:reverse(Res).
+
+type_clause(Tree) ->
+    erl_syntax_lib:fold(
+        fun (El, {Leaf, _} = Acc) ->
+            case return_type_clause(El) of
+                type_undef ->
+                    Acc;
+                EndClauseType ->
+                    {[El | Leaf], EndClauseType}
+            end
+        end,
+        {[], type_undef},
+        Tree
+    ).
+
+-spec first_clause(ListAST :: ast(),
+            Fun :: fun((ast()) -> true  | false)) ->
+    ast().
+%%--------------------------------------------------------------------
+%% @doc     Returns AST representing list with elements from the
+%%          `ListAST' for which `Fun' returns true.
+%% @end
+%%--------------------------------------------------------------------
+first_clause(List, Fun) when is_list(List) ->
+    first_clause(List, Fun, []);
+first_clause(Tree, Fun) ->
+    erl_syntax_lib:fold(
+        fun (El, Acc) ->
+            case Fun(El) of
+                true -> [El | Acc];
+                false -> Acc
+            end
+        end,
+        [],
+        Tree
+    ).
+
+return_type_clause({'case', _, _, _}) ->
+    type_case;
+return_type_clause({'fun', _, {clauses, _}}) ->
+    type_fun;
+return_type_clause({'if', _, _}) ->
+    type_if;
+return_type_clause({'receive', _, _}) ->
+    type_receive;
+return_type_clause({'receive', _, _, _, _}) ->
+    type_receive_after;
+return_type_clause({'try', _, _, [], _, []}) ->
+    type_try_catch;
+return_type_clause({'receive', _, _, _, _, []}) ->
+    type_try_case_catch;
+return_type_clause({'receive', _, _, [], [], _}) ->
+    type_try_after;
+return_type_clause({'receive', _, _, _, [], _}) ->
+    type_try_case_after;
+return_type_clause({'receive', _, _, [], _, _}) ->
+    type_try_catch_after;
+return_type_clause({'receive', _, _, _, _, _}) ->
+    type_try_case_catch_after;
+return_type_clause(_) ->
+    type_undef.
 
 -spec replace(ast(),
               Fun :: fun((ast()) -> ast())) ->

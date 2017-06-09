@@ -30,17 +30,18 @@ parse_transform(AST, _Options) ->
         AST4 = pt_supp:replace_remote_call(AST3, pt_lib, replace_fold, fun replace_function/2, nothing),
         AST5 = pt_supp:replace_remote_call(AST4, pt_lib, replace_first, fun replace_function/2, nothing),
         AST6 = pt_supp:replace_remote_call(AST5, pt_lib, match, fun replace_function/2, nothing),
-        AST7 = [replace_ast_patterns(T) || T <- AST6],
+        AST7 = pt_supp:replace_remote_call(AST6, pt_lib, first_clause, fun replace_function/2, nothing),
+        AST8 = [replace_ast_patterns(T) || T <- AST7],
 
-        AST8 = pt_supp:replace_remote_call(AST7, pt_lib, is_atom, fun replace_function/2, nothing),
-        AST9 = pt_supp:replace_remote_call(AST8, pt_lib, is_list, fun replace_function/2, nothing),
-        AST10 = pt_supp:replace_remote_call(AST9, pt_lib, is_variable, fun replace_function/2, nothing),
-        AST11 = pt_supp:replace_remote_call(AST10, pt_lib, is_string, fun replace_function/2, nothing),
-        AST12 = pt_supp:replace_remote_call(AST11, pt_lib, is_tuple, fun replace_function/2, nothing),
-        AST13 = pt_supp:replace_remote_call(AST12, pt_lib, is_function, fun replace_function/2, nothing),
-        AST14 = pt_supp:replace_remote_call(AST13, pt_lib, is_fun, fun replace_function/2, nothing),
-        ?PT_DBG("NewAST: ~p", [AST14]),
-        AST14
+        AST9 = pt_supp:replace_remote_call(AST8, pt_lib, is_atom, fun replace_function/2, nothing),
+        AST10 = pt_supp:replace_remote_call(AST9, pt_lib, is_list, fun replace_function/2, nothing),
+        AST11 = pt_supp:replace_remote_call(AST10, pt_lib, is_variable, fun replace_function/2, nothing),
+        AST12 = pt_supp:replace_remote_call(AST11, pt_lib, is_string, fun replace_function/2, nothing),
+        AST13 = pt_supp:replace_remote_call(AST12, pt_lib, is_tuple, fun replace_function/2, nothing),
+        AST14 = pt_supp:replace_remote_call(AST13, pt_lib, is_function, fun replace_function/2, nothing),
+        AST15 = pt_supp:replace_remote_call(AST14, pt_lib, is_fun, fun replace_function/2, nothing),
+        ?PT_DBG("NewAST: ~p", [AST15]),
+        AST15
     catch
         throw:{parse_error, _} = Error ->
             pt_supp:generate_errors(AST, [Error], []) ++ AST;
@@ -805,6 +806,20 @@ replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3
     replace_function2({call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, []]}, P1);
 replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, Guard]}, P1) ->
     replace_function2({call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, [Guard]]}, P1);
+
+replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, first_clause}}, [Tree, Pattern]}, P1) ->
+    ReplaceFun =
+    {'fun', Line, {clauses, [{clause, Line,
+        [{var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'}],
+        [],
+        [{'case', Line, {var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'},
+            [
+                {clause, Line, [Pattern], [], [{atom, Line, 'true'}]},
+                {clause, Line, [{var, Line, '_'}], [], [{atom, Line, 'false'}]}
+            ]}]
+    }]}},
+    ReplaceWith = {call, Line, {remote, Line, {atom, Line, pt_supp}, {atom, Line, first_clause}}, [Tree, ReplaceFun]},
+    ReplaceWith;
 
 % ast("log()", Line) -> {call, Line, {atom, Line, log}, []}
 replace_function(_Call = {call, Line, {atom, _, ast}, [{string, _, Str}, LineVarAst]}, _) ->
