@@ -30,7 +30,6 @@ parse_transform(AST, _Options) ->
         AST4 = pt_supp:replace_remote_call(AST3, pt_lib, replace_fold, fun replace_function/2, nothing),
         AST5 = pt_supp:replace_remote_call(AST4, pt_lib, replace_first, fun replace_function/2, nothing),
         AST6 = pt_supp:replace_remote_call(AST5, pt_lib, match, fun replace_function/2, nothing),
-
         AST7 = [replace_ast_patterns(T) || T <- AST6],
 
         AST8 = pt_supp:replace_remote_call(AST7, pt_lib, is_atom, fun replace_function/2, nothing),
@@ -98,7 +97,6 @@ replace_ast_patterns(AST) ->
                             Header = {match, Line, {var, Line, pt_supp:mk_atom("__pt_tmp_case_var_", Line)}, Var},
                             CodeBeforeCase = generate_code_for_each_pattern_in_case(_ListOfClauses_ = Vars, Line),
                             NewNewClauses = remove_tmp_vars_from_main_case_clauses(NewClauses, Vars),
-
                             % begin
                             %   P' = P, % Header
                             %
@@ -386,233 +384,360 @@ replace_cons_var(_V) -> nochange.
 
 
 process_additional_syntax(AST, Type) ->
-
     AST0 = pt_supp:replace(AST,
         fun
-            ({tuple, FLine1,
-             [{atom, FLine2, function}, FLine3, FFunName,
-                 _,
-                  {cons, _,
-                   {tuple, _,
-                    [{atom, _, clause}, _,
-                     {cons, _,
-                      {tuple, _,
-                       [{atom, _, atom}, _,
-                        {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}]},
-                          {nil, _}},
-                         {nil, _}, {cons, _, Var1, {nil, _}}]},
+            ({tuple, FLine1, [
+                {atom, FLine2, function},
+                FLine3,
+                FFunName,
+                _,
+                {cons, _,
+                    {tuple, _, [
+                        {atom, _, clause},
+                        _,
+                        {cons, _,
+                            {tuple, _, [
+                                {atom, _, atom},
+                                _,
+                                {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}
+                            ]},
+                            {nil, _}
+                        },
+                        {nil, _},
+                        {cons, _, Var1, {nil, _}}
+                    ]},
                     {nil, _}
-                    }]}) ->
-                        GetArity = fun (V) ->
-                            {call,FLine2, {atom, FLine2,length},
-                                              [{call, FLine2, {atom, FLine2,element}, [{integer,FLine2,3}, {call, FLine2,{atom,FLine2,hd},[V]}]}]}
-                        end,
-
-                        GArity = case Type of
-                                    ast ->
-                                        GetArity(Var1);
-                                    ast_pattern -> {var, FLine2, '_'}
-                                 end,
-                        {tuple, FLine1,
-                        [{atom, FLine2, function}, FLine3, FFunName,
-                           GArity,
-                           Var1
-                        ]};
-
-            ({tuple, Line1, [{atom, Line2, function}, Line3, {atom, Line4, FunName}, FunArity, Clauses]}) ->
+                    }
+            ]}) ->
+                GetArity =
+                    fun (V) ->
+                        {call,FLine2, {atom, FLine2,length}, [
+                            {call, FLine2, {atom, FLine2,element}, [
+                                {integer,FLine2,3}, {call, FLine2, {atom,FLine2,hd}, [V]}
+                            ]}
+                        ]}
+                    end,
+                GArity =
                     case Type of
-                        ast_pattern ->
-                            {tuple, Line1, [{atom, Line2, function}, Line3, {atom, Line4, FunName}, {var, Line4, '_'}, Clauses]};
                         ast ->
-                            Res = erl_syntax_lib:fold(
-                                fun ({tuple, _, [{atom, _, clause}, _, FunParams, _FunGuards, _FunExprs]}, Acc) ->
-                                        RR =
-                                            pt_supp:list_fold(
-                                                fun ( % {pt_consvar, VarName}
+                            GetArity(Var1);
+                        ast_pattern -> {var, FLine2, '_'}
+                    end,
+                {tuple, FLine1, [
+                    {atom, FLine2, function}, FLine3, FFunName,
+                    GArity,
+                    Var1
+                ]};
+
+            ({tuple, Line1, [
+                {atom, Line2, function}, Line3, {atom, Line4, FunName}, FunArity, Clauses]
+            }) ->
+                case Type of
+                    ast_pattern ->
+                        {tuple, Line1, [
+                            {atom, Line2, function},
+                            Line3,
+                            {atom, Line4, FunName},
+                            {var, Line4, '_'},
+                            Clauses
+                        ]};
+                    ast ->
+                        Res = erl_syntax_lib:fold(
+                            fun
+                                ({tuple, _, [
+                                    {atom, _, clause},
+                                    _,
+                                    FunParams,
+                                    _FunGuards,
+                                    _FunExprs]
+                                }, Acc) ->
+                                    RR = pt_supp:list_fold(
+                                        fun
+                                            ({tuple, _, [
+                                                {atom, _, tuple},
+                                                _,
+                                                {cons, _,
                                                     {tuple, _, [
-                                                     {atom, _, tuple}, _,
-                                                      {cons, _, {tuple, _, [{atom, _, atom}, _, {atom, _, pt_consvar}]},
-                                                      {cons, _,
-                                                       {tuple, _, [{atom, _, atom}, _, {atom, _, VarName}]},
-                                                           {nil, _}}}]}, _, {NN, VV}) -> {NN, [VarName|VV]};
-                                                    (_, _, {NN, VV}) -> {NN + 1, VV}
-                                                end, {0, []}, FunParams),
-                                        case RR of
-                                            {_, []} -> Acc;
-                                            _ -> RR
-                                        end;
-                                    (_, Acc) -> Acc
-                                end,
-                                notfound,
-                                Clauses
-                            ),
-                            case Res of
-                                {NormalPNum, [FirstConsParam|ConsParams]} ->
-                                    MakeLenCall = fun (VVV) -> {call, Line4, {atom, Line4, 'length'}, [{tuple, Line4, [{atom, Line4, atom}, {integer, Line4, Line4}, {atom, Line4, VVV}]}]} end,
-                                    ConsVarLens =
-                                        lists:foldl(
-                                            fun (NextConsParam, Cur) ->
-                                                {op, Line4, '++', MakeLenCall(NextConsParam), Cur}
-                                            end, MakeLenCall(FirstConsParam), ConsParams),
-                                    {tuple, Line1, [{atom, Line2, function}, Line3, {atom, Line4, FunName},
+                                                        {atom, _, atom}, _, {atom, _, pt_consvar}
+                                                    ]},
+                                                    {cons, _,
+                                                        {tuple, _, [
+                                                            {atom, _, atom}, _, {atom, _, VarName}
+                                                        ]},
+                                                        {nil, _}
+                                                    }
+                                                }
+                                            ]}, _, {NN, VV}) ->
+                                                {NN, [VarName|VV]};
+                                            (_, _, {NN, VV}) ->
+                                                {NN + 1, VV}
+                                        end, {0, []}, FunParams),
+                                    case RR of
+                                        {_, []} -> Acc;
+                                        _ -> RR
+                                    end;
+                                (_, Acc) -> Acc
+                            end,
+                            notfound,
+                            Clauses
+                        ),
+                        case Res of
+                            {NormalPNum, [FirstConsParam | ConsParams]} ->
+                                MakeLenCall =
+                                    fun
+                                        (VVV) ->
+                                            {call, Line4, {atom, Line4, 'length'}, [
+                                                {tuple, Line4, [
+                                                    {atom, Line4, atom},
+                                                    {integer, Line4, Line4},
+                                                    {atom, Line4, VVV}
+                                                ]}
+                                            ]}
+                                    end,
+                                ConsVarLens =
+                                    lists:foldl(
+                                        fun (NextConsParam, Cur) ->
+                                            {op, Line4, '++', MakeLenCall(NextConsParam), Cur}
+                                        end, MakeLenCall(FirstConsParam), ConsParams
+                                    ),
+                                {tuple, Line1, [
+                                    {atom, Line2, function},
+                                    Line3,
+                                    {atom, Line4, FunName},
                                     {op, Line4, '+', ConsVarLens, {integer, Line4, NormalPNum}},
-                                    Clauses]};
-                                {ok, VarName} ->
-                                    {tuple, Line1, [{atom, Line2, function}, Line3, {atom, Line4, FunName},
-                                    {call, Line4, {atom, Line4, 'length'}, [{tuple, Line4, [{atom, Line4, atom}, {integer, Line4, Line4}, {atom, Line4, VarName}]}]}, Clauses]};
-                                notfound ->
-                                    {tuple, Line1, [{atom, Line2, function}, Line3, {atom, Line4, FunName}, FunArity, Clauses]}
+                                    Clauses
+                                ]};
+                            {ok, VarName} ->
+                                {tuple, Line1, [
+                                    {atom, Line2, function}, Line3, {atom, Line4, FunName},
+                                    {call, Line4, {atom, Line4, 'length'}, [
+                                        {tuple, Line4, [
+                                            {atom, Line4, atom},
+                                            {integer, Line4, Line4},
+                                            {atom, Line4, VarName}
+                                        ]}
+                                    ]},
+                                    Clauses
+                                ]};
+                            notfound ->
+                                {tuple, Line1, [
+                                    {atom, Line2, function},
+                                    Line3,
+                                    {atom, Line4, FunName},
+                                    FunArity,
+                                    Clauses
+                                ]}
                             end
                     end;
-
                 (X) -> X
         end
     ),
-
-
     AST1 = pt_supp:replace(AST0,
-        % Fixes for R15B02
-        % Following code works only for R15B01 and earlier:
-        %fun
-        %    ({cons, _L, E, {nil, _}} = List) ->
-        %        case replace_cons_var(E) of
-        %            E -> List;
-        %            V -> V
-        %        end;
-        %    ({cons, L, E, T} = List) ->
-        %        case replace_cons_var(E) of
-        %            E -> List;
-        %            V -> {op, L, '++', V, T}
-        %        end;
-        %    (V) -> V
-        %end
-        fun ({cons, L, _, _} = List) -> replace_cons_var_in_list(List, L);
-            (V) -> V
-        end),
-
-
+        fun
+            ({cons, L, _, _} = List) ->
+                replace_cons_var_in_list(List, L);
+            (V) ->
+                V
+        end
+    ),
     pt_supp:replace(AST1,
         fun
-           ({tuple, FLine1,
-             [{atom, FLine2, function}, FLine3, FFunName,
-                 _,
-                  {cons, _,
-                   {tuple, _,
-                    [{atom, _, clause}, _,
-                     {cons, _,
-                      {tuple, _,
-                       [{atom, _, atom}, _,
-                        {atom, _, '__PT_FUNCTION_DOT_VAR_REPLACE'}]},
-                          {nil, _}},
-                         {nil, _}, {cons, _, Var1, {nil, _}}]},
-                       {cons, _,
-                        {tuple, _,
-                         [{atom, _, clause}, _,
-                          {cons, _,
-                           {tuple, _,
-                            [{atom, _, atom}, _,
-                             {atom, _, '__PT_FUNCTION_DOT_VAR_REPLACE_ARITY'}]},
-                           {nil, _}},
-                      {nil, _}, {cons, _, Var2, {nil, _}}]},
-                    {nil, _}}}]}) ->
-                    NewVar2 = case Var2 of
-                                {tuple, _,[{atom,_,integer},_, Val2]} -> Val2;
-                                _ -> Var2
-                              end,
-                    {tuple, FLine1,
-                    [{atom, FLine2, function}, FLine3, FFunName,
-                       NewVar2,
-                       Var1
-                    ]};
-
-            ({cons, _,
-             {tuple, _,
-               [{atom, _, clause}, _,
-            {cons, _,
-             {tuple, _,
-                  [{atom, _, tuple}, _,
-                   {cons, _,
-                    {tuple, _, [{atom, _, atom}, _, {atom, _, 'throw'}]},
+            ({tuple, FLine1, [
+                {atom, FLine2, function},
+                FLine3,
+                FFunName,
+                _,
+                {cons, _,
+                    {tuple, _, [
+                        {atom, _, clause},
+                        _,
+                        {cons, _,
+                            {tuple, _, [{atom, _, atom}, _, {atom, _, '__PT_FUNCTION_DOT_VAR_REPLACE'}]},
+                            {nil, _}
+                        },
+                        {nil, _},
+                        {cons, _, Var1, {nil, _}}
+                    ]},
                     {cons, _,
-                        {tuple, _,
-                          [{atom, _, atom}, _,
-                           {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}]},
-                             {cons, _,
-                              {tuple, _,
-                           [{atom, _, var}, _, {atom, _, '_'}]},
-                              {nil, _}}}}]},
-                             {nil, _}},
-                    {nil, _}, {cons, _, Var, {nil, _}}]},
-                    {nil, _}}
-                             ) -> Var;
-
+                        {tuple, _, [
+                            {atom, _, clause},
+                            _,
+                            {cons, _,
+                                {tuple, _, [
+                                    {atom, _, atom}, _,
+                                    {atom, _, '__PT_FUNCTION_DOT_VAR_REPLACE_ARITY'}
+                                ]},
+                                {nil, _}
+                            },
+                            {nil, _},
+                            {cons, _, Var2, {nil, _}}
+                        ]},
+                        {nil, _}
+                    }}
+                ]}) ->
+                    NewVar2 =
+                        case Var2 of
+                            {tuple, _, [{atom, _, integer}, _, Val2]} ->
+                                Val2;
+                            _ ->
+                                Var2
+                        end,
+                    {tuple, FLine1, [
+                        {atom, FLine2, function},
+                        FLine3,
+                        FFunName,
+                        NewVar2,
+                        Var1
+                    ]};
             ({cons, _,
-             {tuple, _,
-               [{atom, _, clause}, _,
-                  {cons, _,
-                      {tuple, _,
-                           [{atom, _, atom}, _,
-                                 {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}]},
-                                     {nil, _}},
-                                        {nil, _}, {cons, _, Var, {nil, _}}]},
-                                         {nil, _}}) -> Var;
-
-            ({tuple, BLine1,
-                 [{atom, BLine2, block}, BLine3,
-                  {cons, _,
-                   {tuple, _,
-                    [{atom, _, tuple}, _,
-                     {cons, _,
-                      {tuple, _,
-                       [{atom, _, atom}, _,
-                        {atom, _, pt_consvar}]},
-                      {cons, _,
-                        {tuple, BLine11, [{atom, BLine12, atom}, BLine13, {atom, BLine14, VarName}]},
-                      {nil, _}}}]},
-                   {nil, _}}
-                  ]}) ->
-            {tuple, BLine1,
-                 [{atom, BLine2, block}, BLine3,
-                      {tuple, BLine11, [{atom, BLine12, atom}, BLine13, {atom, BLine14, VarName}]}
-                  ]};
-
-            ({tuple, PLine1,
-            [{atom, PLine2,call},
-             PLine3,
-             PFunName,
-             {cons,_,
-                   {tuple, _,
-                          [{atom, _,tuple},
-                           _,
-                           {cons, _,
-                                 {tuple, _, [{atom, _,atom}, _,{atom, _, pt_consvar}]},
-                                 {cons, _,
-                                    {tuple, PLine11, [{atom, PLine12, atom}, PLine13, {atom, PLine14, VarName}]},
-                                    {nil,_}}}]},
-                   {nil,_}}]}) ->
-            {tuple, PLine1,
-            [{atom, PLine2, call},
-             PLine3,
-             PFunName,
-             {tuple, PLine11, [{atom, PLine12, atom}, PLine13, {atom, PLine14, VarName}]}
-            ]};
-
-            ({tuple, Line1, [{atom, Line2, clause}, Line3, ParamsAST, GuardsAST, Exprs]}) ->
-                Replace =  fun
-                    ({cons, _,
+                {tuple, _, [
+                    {atom, _, clause},
+                    _,
+                    {cons, _,
                         {tuple, _, [
                             {atom, _, tuple},
                             _,
                             {cons, _,
-                               {tuple, _, [{atom, _, atom}, _, {atom, _, pt_consvar}]},
-                               {cons, _,
-                                    {tuple, SLine11, [{atom, SLine12, atom}, SLine13, {atom, SLine14, VarName}]},
-                                    {nil, _}}}]}, {nil, _}}) ->
-                                        {tuple, SLine11, [{atom, SLine12, atom}, SLine13, {atom, SLine14, VarName}]};
-                    (X) -> X
+                                {tuple, _, [{atom, _, atom}, _, {atom, _, 'throw'}]},
+                                {cons, _,
+                                    {tuple, _, [
+                                        {atom, _, atom},
+                                        _,
+                                        {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}
+                                    ]},
+                                    {cons, _,
+                                        {tuple, _, [{atom, _, var}, _, {atom, _, '_'}]},
+                                        {nil, _}
+                                    }
+                                }
+                            }
+                        ]},
+                        {nil, _}
+                    },
+                    {nil, _},
+                    {cons, _, Var, {nil, _}}
+                ]},
+                {nil, _}
+            }) ->
+                Var;
+
+            ({cons, _,
+                {tuple, _, [
+                    {atom, _, clause},
+                    _,
+                    {cons, _,
+                        {tuple, _, [{atom, _, atom}, _, {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}]},
+                        {nil, _}
+                    },
+                    {nil, _},
+                    {cons, _, Var, {nil, _}}
+                ]},
+                {nil, _}
+            }) ->
+                Var;
+
+            ({cons, _,
+                {tuple, _, [
+                    {atom, _, clause},
+                    _,
+                    {nil, _},
+                    {cons, _,
+                        {cons, _,
+                            {tuple, _, [{atom, _, atom}, _, {atom, _, '__PT_CLAUSE_DOT_VAR_REPLACE'}]},
+                            {nil, _}
+                        },
+                        {nil, _}
+                    },
+                    {cons, _, Var, {nil, _}}
+                ]},
+                {nil, _}
+            }) ->
+                Var;
+
+            ({tuple, BLine1, [
+                {atom, BLine2, block},
+                BLine3,
+                {cons, _,
+                    {tuple, _, [
+                        {atom, _, tuple},
+                        _,
+                        {cons, _,
+                            {tuple, _, [{atom, _, atom}, _, {atom, _, pt_consvar}]},
+                            {cons, _,
+                                {tuple, BLine11, [
+                                    {atom, BLine12, atom}, BLine13, {atom, BLine14, VarName}
+                                ]},
+                                {nil, _}
+                            }
+                        }
+                    ]},
+                    {nil, _}
+                }
+            ]}) ->
+                {tuple, BLine1, [
+                    {atom, BLine2, block},
+                    BLine3,
+                    {tuple, BLine11, [{atom, BLine12, atom}, BLine13, {atom, BLine14, VarName}]}
+                ]};
+
+            ({tuple, PLine1, [
+                {atom, PLine2, call},
+                PLine3,
+                PFunName,
+                {cons, _,
+                    {tuple, _, [
+                        {atom, _,tuple},
+                        _,
+                        {cons, _,
+                            {tuple, _, [{atom, _,atom}, _,{atom, _, pt_consvar}]},
+                            {cons, _,
+                                {tuple, PLine11, [
+                                    {atom, PLine12, atom}, PLine13, {atom, PLine14, VarName}
+                                ]},
+                                {nil,_}
+                            }
+                        }
+                    ]},
+                    {nil,_}
+                }
+            ]}) ->
+                {tuple, PLine1, [
+                    {atom, PLine2, call},
+                    PLine3,
+                    PFunName,
+                    {tuple, PLine11, [{atom, PLine12, atom}, PLine13, {atom, PLine14, VarName}]}
+                ]};
+
+            ({tuple, Line1, [{atom, Line2, clause}, Line3, ParamsAST, GuardsAST, Exprs]}) ->
+                Replace =
+                    fun
+                        ({cons, _,
+                            {tuple, _, [
+                                {atom, _, tuple},
+                                _,
+                                {cons, _,
+                                    {tuple, _, [{atom, _, atom}, _, {atom, _, pt_consvar}]},
+                                    {cons, _,
+                                        {tuple, SLine11, [
+                                            {atom, SLine12, atom}, SLine13, {atom, SLine14, VarName}
+                                        ]},
+                                        {nil, _}
+                                    }
+                                }
+                            ]},
+                            {nil, _}
+                        }) ->
+                            {tuple, SLine11, [
+                                {atom, SLine12, atom}, SLine13, {atom, SLine14, VarName}
+                            ]};
+                        (X) ->
+                            X
                 end,
-                {tuple, Line1, [{atom, Line2, clause}, Line3, Replace(ParamsAST), Replace(GuardsAST), Replace(Exprs)]};
-            (X) -> X
+                {tuple, Line1, [
+                    {atom, Line2, clause}, Line3, Replace(ParamsAST), Replace(GuardsAST), Replace(Exprs)
+                ]};
+            (X) ->
+                X
         end
     ).
 
@@ -737,7 +862,6 @@ replace_function({call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, is_fun}},
 
 replace_function(Call, _) ->
     throw(?mk_int_error({unhandled_replace_param, Call})).
-
 
 % processing things like "{String, @Module}"
 process_variables(AST, VarLineAst) ->
