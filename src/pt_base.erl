@@ -807,7 +807,7 @@ replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3
 replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, Guard]}, P1) ->
     replace_function2({call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, match}}, [Tree, Pattern, [Guard]]}, P1);
 
-replace_function(_Call = {call, Line, {remote, L1, {atom, L2, pt_lib}, {atom, L3, first_clause}}, [Tree, Pattern]}, P1) ->
+replace_function(_Call = {call, Line, {remote, _, {atom, _, pt_lib}, {atom, _, first_clause}}, [Tree, Pattern]}, _) ->
     ReplaceFun =
     {'fun', Line, {clauses, [{clause, Line,
         [{var, Line, '__PT_PT_LIB_MATCH_FUN_VAR)'}],
