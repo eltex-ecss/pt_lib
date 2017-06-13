@@ -1,0 +1,13 @@
+language: erlang
+before_install:
+    - wget https://github.com/rebar/rebar/releases/download/2.6.1/rebar
+    - wget https://github.com/erlware/relx/releases/download/v3.5.0/relx
+    - chmod +x rebar
+    - chmod +x relx
+script: "./rebar -V && ./rebar get-deps compile eunit"
+otp_release:
+    - 17.5
+    - 18.0
+    - 19.3
+notifications:
+  email: false

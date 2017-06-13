@@ -278,15 +278,15 @@ return_type_clause({'receive', _, _, _, _}) ->
     type_receive_after;
 return_type_clause({'try', _, _, [], _, []}) ->
     type_try_catch;
-return_type_clause({'receive', _, _, _, _, []}) ->
+return_type_clause({'try', _, _, _, _, []}) ->
     type_try_case_catch;
-return_type_clause({'receive', _, _, [], [], _}) ->
+return_type_clause({'try', _, _, [], [], _}) ->
     type_try_after;
-return_type_clause({'receive', _, _, _, [], _}) ->
+return_type_clause({'try', _, _, _, [], _}) ->
     type_try_case_after;
-return_type_clause({'receive', _, _, [], _, _}) ->
+return_type_clause({'try', _, _, [], _, _}) ->
     type_try_catch_after;
-return_type_clause({'receive', _, _, _, _, _}) ->
+return_type_clause({'try', _, _, _, _, _}) ->
     type_try_case_catch_after;
 return_type_clause(_) ->
     type_undef.
