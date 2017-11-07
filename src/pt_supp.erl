@@ -9,6 +9,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(pt_supp).
+-compile({parse_transform, pt_eval_lib}).
 
 -include("pt_supp.hrl").
 -include("pt_error_macro.hrl").
@@ -278,15 +279,15 @@ return_type_clause({'receive', _, _, _, _}) ->
     type_receive_after;
 return_type_clause({'try', _, _, [], _, []}) ->
     type_try_catch;
-return_type_clause({'receive', _, _, _, _, []}) ->
+return_type_clause({'try', _, _, _, _, []}) ->
     type_try_case_catch;
-return_type_clause({'receive', _, _, [], [], _}) ->
+return_type_clause({'try', _, _, [], [], _}) ->
     type_try_after;
-return_type_clause({'receive', _, _, _, [], _}) ->
+return_type_clause({'try', _, _, _, [], _}) ->
     type_try_case_after;
-return_type_clause({'receive', _, _, [], _, _}) ->
+return_type_clause({'try', _, _, [], _, _}) ->
     type_try_catch_after;
-return_type_clause({'receive', _, _, _, _, _}) ->
+return_type_clause({'try', _, _, _, _, _}) ->
     type_try_case_catch_after;
 return_type_clause(_) ->
     type_undef.
@@ -596,10 +597,13 @@ replace_function_clause_code(AST, FunctionName, Arity, Params, Guards, Code) ->
 %%          assigned to each node of the resulting AST.
 %% @end
 %%--------------------------------------------------------------------
+-define(REMATCH(RE), pt_eval(erlang:element(2, re:compile(RE)))).
+-define(REMATCH(RE, OPT), pt_eval(erlang:element(2, re:compile(RE, OPT)))).
+
 str2ast(String, Line) ->
     try
-        ParseSiple = fun(Str) ->
-                        case re:run(Str, ".*\\.\\s*$", [{capture, [], list}]) of
+        ParseSimple = fun(Str) ->
+                        case re:run(Str, ?REMATCH(".*\\.\\s*$"), [{capture, [], list}]) of
                             match ->
                                 case erl_scan:string(Str, Line) of
                                     {ok, Tokens, _} ->
@@ -619,31 +623,31 @@ str2ast(String, Line) ->
                                 {error, miss_dot}
                         end
                      end,
-        ProcessDotVars = fun(Str) ->
-                            Str0 = [$\s | Str],
-                            Str1 = re:replace(Str0,  "receive\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*after", "receive '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\1 after", [unicode, global, {return, list}]),
-                            Str2 = re:replace(Str1,  "receive\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*end", "receive '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\1 end", [unicode, global, {return, list}]),
-                            Str3 = re:replace(Str2,  "case(.*)of\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*end", "case \\1 of '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\2 end", [unicode, global, {return, list}]),
+        ProcessDotVars =
+            fun(Str) ->
+                Str0 = [$\s | Str],
+                Str1 = re:replace(Str0, ?REMATCH("receive\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*after", [unicode]), "receive '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\1 after", [global, {return, list}]),
+                Str2 = re:replace(Str1, ?REMATCH("receive\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*end", [unicode]), "receive '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\1 end", [global, {return, list}]),
+                Str3 = re:replace(Str2, ?REMATCH("case(.*)of\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*end", [unicode]), "case \\1 of '__PT_CLAUSE_DOT_VAR_REPLACE' -> \\2 end", [global, {return, list}]),
+                Str4 = re:replace(Str3, ?REMATCH("\\#([^\\.]+)\\{(.*)\\.\\.\\.(\\S+)\\.\\.\\.(\\s*)\\}", [unicode]), "\\#\\1\\{\\2'__PT_RECORDFIELD_DOT_VAR_REPLACE' = \\3\\4\\}", [global, {return, list}]),
 
-                            Str4 = re:replace(Str3,  "\\#([^\\.]+)\\{(.*)\\.\\.\\.(\\S+)\\.\\.\\.(\\s*)\\}", "\\#\\1\\{\\2'__PT_RECORDFIELD_DOT_VAR_REPLACE' = \\3\\4\\}", [unicode, global, {return, list}]),
+                Str5 = re:replace(Str4, ?REMATCH("(\\S+)/(\\S+)\\s*\\[\\.\\.\\.(\\S+)\\.\\.\\.\\]", [unicode]), "\\1('__PT_FUNCTION_DOT_VAR_REPLACE') -> \\3; \\1('__PT_FUNCTION_DOT_VAR_REPLACE_ARITY') -> \\2", [global, {return, list}]),
+                Str6 = re:replace(Str5, ?REMATCH("(\\S+)\\s*\\[\\.\\.\\.(\\S+)\\.\\.\\.\\]", [unicode]), "\\1('__PT_CLAUSE_DOT_VAR_REPLACE') -> \\2 ", [global, {return, list}]),
+                Str7 = re:replace(Str6, ?REMATCH("\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*", [unicode]), "{pt_consvar, \\1}", [global, {return, list}]),
+                Str8 = re:replace(Str7, ?REMATCH("([^\\'\\\\])(\\$\\w+)", [unicode]), "\\1'\\2'", [global, {return, list}]),
+                Str9 = re:replace(Str8, ?REMATCH("([^\\'\\\\])(\\@\\w+)", [unicode]), "\\1'\\2'", [global, {return, list}]),
 
-                            Str5 = re:replace(Str4,  "(\\S+)/(\\S+)\\s*\\[\\.\\.\\.(\\S+)\\.\\.\\.\\]", "\\1('__PT_FUNCTION_DOT_VAR_REPLACE') -> \\3; \\1('__PT_FUNCTION_DOT_VAR_REPLACE_ARITY') -> \\2", [unicode, global, {return, list}]),
-                            Str6 = re:replace(Str5,  "(\\S+)\\s*\\[\\.\\.\\.(\\S+)\\.\\.\\.\\]", "\\1('__PT_CLAUSE_DOT_VAR_REPLACE') -> \\2 ", [unicode, global, {return, list}]),
-                            Str7 = re:replace(Str6,  "\\s*\\.\\.\\.(\\S*)\\.\\.\\.\\s*", "{pt_consvar, \\1}", [unicode, global, {return, list}]),
-                            Str8 = re:replace(Str7,  "([^\\'\\\\])(\\$\\w+)", "\\1'\\2'", [unicode, global, {return, list}]),
-                            Str9 = re:replace(Str8,  "([^\\'\\\\])(\\@\\w+)", "\\1'\\2'", [unicode, global, {return, list}]),
-                            Str10 = re:replace(Str9, "fun\\s+([^\\/\\:]+\\:)?\\'([^\\/]+)\\'/\\'(\\$\\w+)\\'", "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [unicode, global, {return, list}]),
-                            Str11 = re:replace(Str10,"fun\\s+([^\\/\\:]+\\:)?\\'([^\\/]+)\\'/\\'(\\@\\w+)\\'", "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [unicode, global, {return, list}]),
-                            Str12 = re:replace(Str11,"fun\\s+([^\\/\\:]+\\:)?([^\\/]+)/\\'(\\$\\w+)\\'", "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [unicode, global, {return, list}]),
-                            Str13 = re:replace(Str12,"fun\\s+([^\\/\\:]+\\:)?([^\\/]+)/\\'(\\@\\w+)\\'", "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [unicode, global, {return, list}]),
-
-                            Str13
-                         end,
+                Str10 = re:replace(Str9, ?REMATCH("fun\\s+([^\\/\\:]+\\:)?\\'([^\\/]+)\\'/\\'(\\$\\w+)\\'", [unicode]), "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [global, {return, list}]),
+                Str11 = re:replace(Str10, ?REMATCH("fun\\s+([^\\/\\:]+\\:)?\\'([^\\/]+)\\'/\\'(\\@\\w+)\\'", [unicode]), "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [global, {return, list}]),
+                Str12 = re:replace(Str11, ?REMATCH("fun\\s+([^\\/\\:]+\\:)?([^\\/]+)/\\'(\\$\\w+)\\'", [unicode]), "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [global, {return, list}]),
+                Str13 = re:replace(Str12, ?REMATCH("fun\\s+([^\\/\\:]+\\:)?([^\\/]+)/\\'(\\@\\w+)\\'", [unicode]), "fun \\1'__PT_FUN_NAME_AND_ARITY_\\2__PT_SEPARATOR__\\3'/0", [global, {return, list}]),
+                Str13
+            end,
 
         ParseParams =   fun(Str) ->
                             case Str of
                                 [] -> {ok, []};
-                                _ -> ParseSiple(Str ++ ".")
+                                _ -> ParseSimple(Str ++ ".")
                             end
                         end,
 
@@ -654,10 +658,10 @@ str2ast(String, Line) ->
                             end
                         end,
 
-        String0 = re:replace(String, "\\n", "", [unicode, global, {return, list}]),
+        String0 = re:replace(String, ?REMATCH("\\n"), "", [global, {return, list}]),
         String1 = ProcessDotVars(String0),
         % TODO: add guards support!!!
-        case re:run(String1, "^\\s*\\(\\s*(?<PARAMS>[^\\(\\)]*)\\)\\s*(when\\s*(?<GUARDS>.+))?\\s*->\\s*(?<BOBY>.+)\\.\\s*$", [{capture, ['PARAMS', 'GUARDS', 'BOBY'], list}]) of
+        case re:run(String1, ?REMATCH("^\\s*\\(\\s*(?<PARAMS>[^\\(\\)]*)\\)\\s*(when\\s*(?<GUARDS>.+))?\\s*->\\s*(?<BOBY>.+)\\.\\s*$"), [{capture, ['PARAMS', 'GUARDS', 'BOBY'], list}]) of
             {match, [Params, Guards, Body]} ->
                 ParamsRes = ParseParams(Params),
                 BodyRes = ParseExprs(Body),
@@ -665,7 +669,7 @@ str2ast(String, Line) ->
                 ListOfGuards = string:tokens(string:strip(Guards), ";"),
                 {ListOfGuardsRes, GuardsErrors} = lists:mapfoldl(
                     fun (El, Acc) ->
-                        case ParseSiple(El ++ ".") of
+                        case ParseSimple(El ++ ".") of
                             {ok, R} -> {R, Acc};
                             {error, R} -> {error, [R | Acc]}
                         end
@@ -687,7 +691,7 @@ str2ast(String, Line) ->
                     {{error, Error1}, {error, Error2}, _} -> {error, {Error1, Error2}}
                 end;
             nomatch ->
-                ParseSiple(String1)
+                ParseSimple(String1)
         end
 
     catch
